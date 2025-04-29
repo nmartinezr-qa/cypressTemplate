@@ -1,0 +1,83 @@
+name: Cypress Tests
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+  pull_request:
+    branches:
+      - master
+      - develop
+    paths:
+      - '**/*'
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        containers: [1, 2, 3, 4, 5] # Adjust the number of containers as needed (Machines)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v3
+        id: cache-cypress
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-binary-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            cypress-binary-
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        id: cache-node-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm install --legacy-peer-deps
+
+      - name: Install Cypress
+        if: steps.cache-cypress.outputs.cache-hit != 'true'
+        run: npx cypress install
+
+      - name: Create reports directory
+        run: mkdir -p ./cypress/reports
+
+      - name: Run Cypress tests
+        run: npx cypress run --record --key ${{ secrets.CYPRESS_RECORD_KEY }} --parallel --ci-build-id ${{ github.run_id }}
+        env:
+          NODE_ENV: test
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CYPRESS_BASE_URL: ${{ vars.CYPRESS_BASE_URL }}
+          CYPRESS_API_URL: ${{ vars.CYPRESS_API_URL }}
+          CYPRESS_GAS_HOME_URL: ${{ vars.CYPRESS_GAS_HOME_URL }}
+          CYPRESS_GAS_USERNAME: ${{ secrets.CYPRESS_GAS_USERNAME }}
+          CYPRESS_GAS_PASSWORD: ${{ secrets.CYPRESS_GAS_PASSWORD }}
+          CYPRESS_OPS_HOME_URL: ${{ vars.CYPRESS_OPS_HOME_URL }}
+          CYPRESS_OPS_USERNAME: ${{ secrets.CYPRESS_OPS_USERNAME }}
+          CYPRESS_OPS_PASSWORD: ${{ secrets.CYPRESS_OPS_PASSWORD }}
+
+      - name: Upload Test Report as Artifact
+        uses: actions/upload-artifact@main
+        if: always()
+        with:
+          name: cypress-test-report-${{ matrix.containers }}
+          path: |
+            cypress/logs
+            cypress/reports
+          retention-days: 30
